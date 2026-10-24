@@ -1,0 +1,41 @@
+
+name: Novaler OpenPLi Preflight
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/**"
+      - "README.md"
+      - "device/**"
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check project files
+        shell: bash
+        run: |
+          set -eu
+
+          echo "=== Repository ==="
+          git log -1 --oneline || true
+
+          echo "=== Device configuration files ==="
+          find device -maxdepth 4 -type f -print 2>/dev/null \
+            || echo "No device directory yet"
+
+          echo "=== OpenPLi build configuration ==="
+          find . -maxdepth 4 -type f \
+            \( -name "local.conf" \
+            -o -name "bblayers.conf" \
+            -o -name "machine.conf" \
+            -o -name "*.bb" \) -print
+
+          echo "Preflight completed."
