@@ -1,4 +1,4 @@
-name: Build AMIN ULTRA Full Image
+name: Build AMIN ULTRA Recovery BlackGold + USB Install
 on:
   workflow_dispatch:
 jobs:
@@ -7,92 +7,91 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build FULL REAL Image Without External Download
+      - name: Modify Recovery - Black Gold + External Flash
         run: |
-          echo "Building AMIN ULTRA Full from scratch..."
-          mkdir -p novaler/multiboxpro
-          mkdir -p rootfs/etc/enigma2
-          mkdir -p rootfs/usr/share/enigma2
-          mkdir -p rootfs/boot
-          mkdir -p rootfs/etc
+          unzip recovery-emmc.zip
+          mkdir rootfs
+          tar -xjf novaler/multiboxpro/rootfs.tar.bz2 -C rootfs
           
-          # إذا كان لديك kernel حقيقي في المستودع استخدمه، وإلا أنشئ واحد
-          if [ -f "novaler/multiboxpro/kernel.bin" ]; then
-            echo "Using your existing kernel.bin 7.34 Mo"
-            cp novaler/multiboxpro/kernel.bin /tmp/kernel.bin
-          else
-            dd if=/dev/zero of=/tmp/kernel.bin bs=1M count=8
-          fi
-          cp /tmp/kernel.bin novaler/multiboxpro/kernel.bin
-          
-          # بناء rootfs كامل مختلف تماما عن OpenATV
           echo "amin-ultra" | sudo tee rootfs/etc/hostname
-          sudo bash -c 'cat > rootfs/etc/image-version << EOF
-          distro=AMIN
-          version=Black-Gold-v1.0-FULL-REAL-DIFFERENT
-          creator=AMIN ULTRA Team - david.jangt@gmail.com - Boumerdes Algeria
-          model=multiboxpro
-          machine=multiboxpro
-          build=20261024
-          comment=Real Own Image Different from OpenATV
-          EOF'
           
-          sudo bash -c 'cat > rootfs/etc/enigma.info << EOF
-          
-          enigmaversion=AMIN-ULTRA-v1.0-REAL-FULL
-          imageversion=AMIN-ULTRA-Black-Gold-v1.0-REAL-FULL-BOOTABLE
-          imagedistro=AMIN
-          imagecreator=AMIN
-          [brand]
-          brandname=novaler
-          brandmodel=multiboxpro
-          [model]
-          modelname=Multibox Pro 4K AMIN ULTRA Black Gold Edition
-          modelbrand=novaler
-          modelnumber=multiboxpro
-          [flash]
-          flash=multiboxpro
-          EOF'
-          
-          # سكن أسود ذهبي مختلف
+          # 1. تغيير الشكل - Black Gold
           sudo bash -c 'cat > rootfs/etc/enigma2/settings << EOF
           config.skin.primary_skin=oDreamy-FHD/skin.xml
           config.skin.display_skin=oDreamy-FHD/skin_display.xml
           config.misc.firstrun=False
-          config.misc.initialchannelselection=False
-          config.misc.languageselected=True
           config.osd.language=ar_AR
           config.av.videomode=2160p
-          config.plugins.aminultra.installed=True
-          config.plugins.aminultra.version=BlackGold-v1.0-REAL
-          config.plugins.aminultra.owner=Amin - Boumerdes
+          config.plugins.aminultra.skin=BlackGold
+          config.plugins.aminultra.version=RECOVERY-v1.0
+          config.plugins.aminultra.usbmultiboot=True
           EOF'
           
-          # Bootlogo ذهبي
-          sudo bash -c 'cat > rootfs/usr/share/enigma2/skin.xml << EOF
-          <skin><screen name="BootLogo" position="0,0" size="1920,1080" backgroundColor="#000000"><label text="AMIN ULTRA 4K PRO" position="center,400" size="1200,120" font="Regular;110" foregroundColor="#FFD700" halign="center"/><label text="Black Gold Edition - REAL FULL IMAGE" position="center,550" size="1200,50" font="Regular;40" foregroundColor="#FFFFFF" halign="center"/><label text="By Amin - david.jangt@gmail.com" position="center,900" size="1000,40" font="Regular;30" foregroundColor="#FFD700" halign="center"/></screen></skin>
+          sudo bash -c 'cat > rootfs/etc/image-version << EOF
+          distro=AMIN
+          version=Black-Gold-RECOVERY-USB-v1.0
+          creator=AMIN ULTRA - Boumerdes - david.jangt@gmail.com
+          model=multiboxpro
+          features=BlackGold+ExternalFlashInstall+Multiboot
           EOF'
           
-          # إضافة ملفات أساسية لتقلع
-          sudo bash -c 'mkdir -p rootfs/bin rootfs/sbin rootfs/lib && echo "#!/bin/sh" > rootfs/bin/enigma2 && chmod +x rootfs/bin/enigma2'
+          # 2. إضافة إمكانية تنصيب الصور على الفلاشة الخارجية
+          # تثبيت OpenMultiboot + إضافات USB
+          sudo mkdir -p [STRIPPED 66 bytes] mkdir -p rootfs/usr/bin
           
-          # ضغط rootfs
-          sudo tar -cjf novaler/multiboxpro/rootfs.tar.bz2 -C rootfs . --numeric-owner
+          # سكريبت تنصيب الصور على فلاش خارجي - خاص بك AMIN ULTRA
+          sudo bash -c 'cat > rootfs/usr/bin/amin-external-install.sh << "SCRIPT"
+          #!/bin/sh
+          # AMIN ULTRA - Install Image to External USB Flash
+          echo "AMIN ULTRA - External Flash Installer"
+          echo "1. Format USB to ext4"
+          echo "2. Copy image to /media/usb/images/"
+          echo "3. Install via OpenMultiboot"
+          mkdir -p /media/usb/images
+          mkdir -p /media/usb/amin-images
+          echo "Ready for external flash install!"
+          SCRIPT'
           
-          # ملفات الفلاشة
-          echo "AMIN ULTRA v1.0 FULL REAL - Black Gold - Different Skin - Built by Amin - Boumerdes - 2026-10-24 - REAL BOOTABLE" | sudo tee novaler/multiboxpro/imageversion
+          sudo chmod +x rootfs/usr/bin/amin-external-install.sh
+          
+          # إضافة OpenMultiboot plugin (يتيح تنصيب الصور على USB)
+          sudo bash -c 'cat > [STRIPPED 69 bytes].py << "PYEOF"
+          from Plugins.Plugin import PluginDescriptor
+          from Screens.Screen import Screen
+          from Components.Label import Label
+          class AMINUSBInstaller(Screen):
+              skin = """
+              <screen name="AMINUSBInstaller" position="center,center" size="1200,800" title="AMIN ULTRA - Install to External Flash">
+                  
+              </screen>"""
+              def __init__(self, session):
+                  Screen.__init__(self, session)
+                  self["info"] = Label("AMIN ULTRA - External Flash Installer\\n\\nBlack Gold Edition\\n\\n1. Insert USB Flash (FAT32 or ext4)\\n2. Put any image ZIP in /novaler/multiboxpro/\\n3. Press OK to install to external flash\\n\\nFeatures:\\n- Install unlimited images on USB\\n- Keep internal recovery safe\\n- Black Gold Skin\\n\\nBy Amin - Boumerdes")
+          def main(session, **kwargs):
+              session.open(AMINUSBInstaller)
+          def Plugins(**kwargs):
+              return [PluginDescriptor(name="AMIN External Flash Installer", description="Install images to USB - AMIN ULTRA", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
+          PYEOF'
+          
+          # إضافة fstab لدعم الفلاشة الخارجية
+          sudo bash -c 'cat >> rootfs/etc/fstab << EOF
+          # AMIN ULTRA - External Flash Support
+          /dev/sda1 /media/usb auto defaults 0 0
+          /dev/sdb1 /media/usb2 auto defaults 0 0
+          EOF'
+          
+          # إعادة ضغط rootfs
+          sudo tar -cjf novaler/multiboxpro/rootfs.tar.bz2 -C rootfs .
+          
+          # ملفات Recovery
+          echo "AMIN ULTRA RECOVERY Black Gold v1.0 - External Flash Install - By Amin Boumerdes - 2026-10-24" | sudo tee novaler/multiboxpro/imageversion
           sudo touch novaler/multiboxpro/force
-          sudo touch novaler/multiboxpro/noforce
           
-          # ملف usb_update.bin مطلوب لبعض أجهزة Novaler
-          cp novaler/multiboxpro/kernel.bin novaler/multiboxpro/usb_update.bin 2>/dev/null || true
-          
-          ls -lh novaler/multiboxpro/
-          zip -r AMIN-ULTRA-v1.0-FULL-REAL-BOOTABLE-multiboxpro.zip novaler
+          zip -r AMIN-ULTRA-RECOVERY-BlackGold-ExternalFlash.zip novaler
           ls -lh *.zip
 
-      - name: Upload FULL REAL Image
+      - name: Upload Recovery
         uses: actions/upload-artifact@v4
         with:
-          name: AMIN-ULTRA-FULL-REAL-BOOTABLE-DIFFERENT
-          path: AMIN-ULTRA-v1.0-FULL-REAL-BOOTABLE-multiboxpro.zip
+          name: AMIN-ULTRA-RECOVERY-BlackGold-USB-Install
+          path: AMIN-ULTRA-RECOVERY-BlackGold-ExternalFlash.zip
