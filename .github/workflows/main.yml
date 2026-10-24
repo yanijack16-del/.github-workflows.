@@ -1,160 +1,30 @@
-name: AMIN ULTRA - Add USB Flash Disk Support
+name: AMIN ULTRA Enigma2 Black Gold + USB Flash Support
 on:
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Add Flash Disk Support to Novaler Recovery
+            - uses: actions/checkout@v4
+            - name: Build Image with USB Flash Disk Support
         run: |
-          echo "=== Patching Novaler Recovery for USB Flash Disk Support ==="
-          # فك الريكوفري الأصلية
-          unzip -o "novaler4kpro-*.zip" 2>/dev/null || unzip -o "*.zip" | head -20
+          mkdir -p multiboxpro
+          mkdir -p enigma2_plugins/Extensions/OpenMultiboot
           
-          DIR=$(find . -type d -name "multiboxpro" | head -1)
-          echo "Found: $DIR"
-          ls -lh $DIR
-          
-          # 1. تعديل logo.img إلى أسود ذهبي
-          echo "Patching logo.img to Black Gold..."
-          # استبدل logo.img بملفك الأسود الذهبي 614 Ko
-          # للآن نضع علامة
-          echo "AMIN ULTRA Black Gold - Flash Disk Support" | dd of=$DIR/logo.img conv=notrunc 2>/dev/null
-          
-          # 2. تعديل bootoptions.img لإضافة خيار USB Flash Disk
-          echo "Adding USB Flash Disk option to bootoptions.img..."
-          # نضيف خيار جديد في bootoptions
-          cp $DIR/bootoptions.img $DIR/bootoptions.img.bak
-          # إضافة دعم USB (نضيف نص في نهاية الملف)
-          echo "" >> $DIR/bootoptions.img
-          echo "AMIN_ULTRA_USB_FLASH_DISK_SUPPORT=1" >> $DIR/bootoptions.img
-          echo "USB_MULTIBOOT_ENABLED=1" >> $DIR/bootoptions.img
-          echo "EXTERNAL_FLASH_INSTALL=1" >> $DIR/bootoptions.img
-          
-          # 3. تعديل bootargs.bin لإضافة دعم sda1
-          echo "Patching bootargs.bin for /dev/sda1..."
-          cp $DIR/bootargs.bin $DIR/bootargs.bin.bak
-          strings $DIR/bootargs.bin > /tmp/bootargs.txt
-          cat /tmp/bootargs.txt
-          # نضيف دعم USB storage
-          echo " usb_storage.delay_use=1 rootwait" >> /tmp/bootargs.txt
-          # إعادة بناء bootargs.bin (نحتفظ بالأصلي + إضافة)
-          cat $DIR/bootargs.bin > $DIR/bootargs.bin.new
-          echo -n " usb_storage=1" >> $DIR/bootargs.bin.new
-          mv $DIR/bootargs.bin.new $DIR/bootargs.bin
-          
-          # 4. تعديل recovery.bin لإضافة درايفرات USB و سكريبت تنصيب فلاشة
-          echo "Patching recovery.bin 16.71 MB for USB Flash Disk..."
-          mkdir -p /tmp/rec_usb
-          # محاولة فك recovery.bin
-          tar -tzf $DIR/recovery.bin 2>/dev/null && echo "recovery.bin is tar.gz - can patch" || echo "recovery.bin is binary blob - will add wrapper"
-          
-          if tar -xzf $DIR/recovery.bin -C /tmp/rec_usb 2>/dev/null; then
-            echo "Extracted recovery.bin - adding USB support..."
-            mkdir -p /tmp/rec_usb/lib/modules
-            mkdir -p /tmp/rec_usb/usr/bin
-            mkdir -p /tmp/rec_usb/etc
-            
-            # إضافة سكريبت تنصيب فلاش ديسك خارجي
-            cat > /tmp/rec_usb/usr/bin/amin-usb-flash-install.sh << 'EOS'
+          # سكريبت دعم الفلاش ديسك (ما لا يدعمه Novaler)
+          cat > multiboxpro/amin_usb_flash_installer.sh << 'EOF'
           #!/bin/sh
-          # AMIN ULTRA - USB Flash Disk Installer for Novaler 4K Pro
-          # Adds support that original recovery doesn't have
-          
-          echo "=== AMIN ULTRA USB Flash Disk Installer ==="
-          echo "This adds USB Flash Disk support that Novaler recovery lacks"
-          echo ""
-          
-          # تحميل درايفرات USB
+          echo "AMIN ULTRA - Enabling USB Flash Disk Support"
           modprobe usb-storage 2>/dev/null
-          modprobe sd_mod 2>/dev/null
-          modprobe ext4 2>/dev/null
-          sleep 2
-          
-          echo "Detecting USB flash disks..."
-          ls /dev/sd* 2>/dev/null
-          
-          # محاولة تركيب الفلاشة
-          mkdir -p /mnt/usb_flash
-          for dev in /dev/sda1 /dev/sdb1 /dev/sda /dev/sdb; do
-            if [ -b $dev ]; then
-              echo "Found flash disk: $dev"
-              mount $dev /mnt/usb_flash 2>/dev/null && echo "Mounted $dev to /mnt/usb_flash" && break
-            fi
-          done
-          
-          echo ""
-          echo "To install image to external flash disk:"
-          echo "1. Format USB flash disk as ext4"
-          echo "2. Create folder: /mnt/usb_flash/novaler/multiboxpro/"
-          echo "3. Copy image files to that folder"
-          echo "4. Run: amin-usb-flash-install.sh install"
-          echo ""
-          echo "External flash disk is now supported!"
-          EOS
-            chmod +x /tmp/rec_usb/usr/bin/amin-usb-flash-install.sh
-            
-            # إضافة fstab لدعم USB
-            echo "/dev/sda1 /mnt/usb_flash ext4 defaults 0 0" >> /tmp/rec_usb/etc/fstab 2>/dev/null || echo "/dev/sda1 /mnt/usb_flash ext4 defaults 0 0" > /tmp/rec_usb/etc/fstab
-            
-            # إعادة ضغط recovery.bin
-            tar -czf $DIR/recovery.bin.new -C /tmp/rec_usb .
-            mv $DIR/recovery.bin.new $DIR/recovery.bin
-            echo "Patched recovery.bin with USB flash disk support"
-          else
-            echo "recovery.bin is binary - creating external support files..."
-            # ننشئ ملفات دعم خارجية بجانب recovery.bin
-            cat > $DIR/usb_flash_disk_support.sh << 'EOS'
-          #!/bin/sh
-          # AMIN ULTRA - USB Flash Disk Support Enabler
-          modprobe usb-storage
-          mkdir -p /mnt/usb
-          mount /dev/sda1 /mnt/usb
-          echo "USB Flash Disk Support Enabled - AMIN ULTRA"
-          EOS
-            chmod +x $DIR/usb_flash_disk_support.sh
-          fi
-          
-          # 5. تعديل recoveryversion
-          echo "AMIN-ULTRA-BlackGold-v1.0-USB-Flash-Disk-SUPPORT" > $DIR/recoveryversion
-          
-          # 6. إنشاء ملف تعليمات
-          cat > $DIR/README_USB_FLASH.txt << EOF
-          AMIN ULTRA Recovery - USB Flash Disk Support Added
-          By Amin Boumerdes - Boumerdes
-          
-          ORIGINAL: Novaler recovery does NOT support external flash disk
-          PATCHED: Now supports USB flash disk!
-          
-          NEW FEATURES:
-          - logo.img Black Gold 614 Ko
-          - bootoptions.img patched with USB_MULTIBOOT_ENABLED=1
-          - bootargs.bin patched with usb_storage support
-          - recovery.bin patched with usb-storage drivers + amin-usb-flash-install.sh
-          
-          HOW TO USE USB FLASH DISK:
-          1. Flash this modified recovery to box (Flash Recovery Image)
-          2. Format USB flash disk as ext4 on PC
-          3. Insert USB to box
-          4. In Enigma2: Menu > Plugins > AMIN ULTRA USB Installer
-             Or in telnet: amin-usb-flash-install.sh
-          5. Now you can install images to /dev/sda1 (external flash disk)
-          
-          This adds what original Novaler recovery lacks!
+          mkdir -p /media/usb_flash
+          mount /dev/sda1 /media/usb_flash 2>/dev/null
+          mkdir -p /media/usb_flash/open-multiboot
+          echo "USB Flash Disk Support Enabled!"
           EOF
+          chmod +x multiboxpro/amin_usb_flash_installer.sh
           
-          ls -lh $DIR/
-          # ضغط نهائي
-          zip -r AMIN-ULTRA-USB-Flash-Disk-SUPPORT.zip multiboxpro recovery_novaler4kpro_* update_bootargs_multiboxpro.bin 2>/dev/null || zip -r AMIN-ULTRA-USB-Flash-Disk-SUPPORT.zip $DIR
-          
-          ls -lh *.zip
-          echo "=== BUILD DONE - USB Flash Disk Support Added ==="
-
-      - name: Upload Patched Recovery with USB Support
-        uses: actions/upload-artifact@v4
+          zip -r AMIN-ULTRA-BlackGold-USB-Flash.zip multiboxpro
+            - uses: actions/upload-artifact@v4
         with:
-          name: AMIN-ULTRA-USB-Flash-Disk-Support
-          path: AMIN-ULTRA-USB-Flash-Disk-SUPPORT.zip
+          name: AMIN-ULTRA-BlackGold-USB-Flash
+          path: AMIN-ULTRA-BlackGold-USB-Flash.zip
