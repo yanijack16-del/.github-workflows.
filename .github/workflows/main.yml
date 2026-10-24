@@ -1,86 +1,85 @@
-name: Build OpenPLi MultiboxPro
+name: Build AMIN ULTRA Full Image
 
 on:
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
   build:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 360
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout workflow repository
-        uses: actions/checkout@v4
-
-      - name: Free runner space
+      - name: Download REAL OpenATV Full Image for Multibox Pro
         run: |
-          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
-          df -h
+          # رابط رسمي مباشر
+          wget --no-check-certificate -O recovery.zip https://images.mynonpublic.com/openatv/7.5/multiboxpro/openatv-7.5-multiboxpro_recovery_emmc.zip || \
+          wget --no-check-certificate -O recovery.zip https://images.mynonpublic.com/openatv/current/multiboxpro/openatv-7.5-multiboxpro_recovery_emmc.zip
+          unzip -l recovery.zip
+          unzip recovery.zip
+          ls -R novaler
 
-      - name: Install build prerequisites
+      - name: Modify to AMIN ULTRA - Your Own Image
         run: |
-        sudo apt-get update
-          sudo apt-get install -y \
-            subversion \
-            gettext \
-            build-essential \
-            chrpath \
-            cpio \
-            debianutils \
-            diffstat \
-            file \
-            gawk \
-            gcc \
-            git \
-            iputils-ping \
-            libacl1 \
-            liblz4-tool \
-            locales \
-            python3 \
-            python3-git \
-            python3-jinja2 \
-            python3-pexpect \
-            python3-pip \
-            python3-subunit \
-            socat \
-            texinfo \
-            unzip \
-            wget \
-            xz-utils \
-            zstd \
-            lz4
-          command -v svn
-          command -v msgfmt
+          sudo apt-get update && sudo apt-get install -y bzip2
+          
+          # فك rootfs الأصلية
+          mkdir rootfs
+          tar -xjf novaler/multiboxpro/rootfs.tar.bz2 -C rootfs --numeric-owner || tar -xjf novaler/multiboxpro/rootfs.tar.bz2 -C rootfs
+          
+          # 1. تغيير اسم الجهاز إلى AMIN
+          echo "amin-ultra" | sudo tee rootfs/etc/hostname
+          
+          # 2. تغيير معلومات الصورة
+          sudo bash -c 'cat > rootfs/etc/image-version << EOF
+          distro=AMIN
+          version=Black-Gold-v1.0-REAL-FULL
+          creator=AMIN ULTRA Team - Amin - david.jangt@gmail.com
+          model=multiboxpro
+          machine=multiboxpro
+          imageversion=AMIN-ULTRA-v1.0
+          imagebuild=20261024
+          EOF'
+          
+          sudo bash -c 'cat > rootfs/etc/enigma.info << EOF
+          
+          enigmaversion=AMIN-ULTRA-v1.0-FULL
+          imageversion=AMIN-ULTRA-Black-Gold-REAL
+          imagedistro=AMIN
+          [brand]
+          brandname=novaler
+          [model]
+          modelname=Multibox Pro 4K AMIN ULTRA Black Gold
+          modelnumber=multiboxpro
+          [flash]
+          flash=multiboxpro
+          EOF'
+          
+          # 3. وضع سكنك الأسود الذهبي كافتراضي
+          sudo mkdir -p rootfs/etc/enigma2
+          sudo bash -c 'echo "config.skin.primary_skin=oDreamy-FHD/skin.xml" >> rootfs/etc/enigma2/settings'
+          sudo bash -c 'echo "config.misc.firstrun=False" >> rootfs/etc/enigma2/settings'
+          sudo bash -c 'echo "config.misc.languageselected=False" >> rootfs/etc/enigma2/settings'
+          sudo bash -c 'echo "config.osd.language=ar_AR" >> rootfs/etc/enigma2/settings'
+          
+          # 4. تغيير شاشة الإقلاع إلى AMIN
+          sudo mkdir -p rootfs/usr/share/enigma2
+          sudo bash -c 'cat > rootfs/usr/share/enigma2/skin_display.xml << EOF
+          <skin><screen name="BootLogo" position="0,0" size="1920,1080" backgroundColor="#000000"><label text="AMIN ULTRA 4K PRO - Black Gold Edition" position="center,800" size="1200,80" font="Regular;50" foregroundColor="#FFD700" halign="center"/><label text="Built by Amin - REAL FULL IMAGE" position="center,900" size="1000,50" font="Regular;35" foregroundColor="#FFFFFF" halign="center"/></screen></skin>
+          EOF'
+          
+          # 5. إعادة ضغط rootfs
+          sudo tar -cjf novaler/multiboxpro/rootfs.tar.bz2 -C rootfs . --numeric-owner
+          
+          # 6. ملفات الفلاش
+          echo "AMIN ULTRA v1.0 REAL FULL - Black Gold - Built 2026-10-24 - For MultiboxPro - By Amin" | sudo tee novaler/multiboxpro/imageversion
+          sudo touch novaler/multiboxpro/force
+          
+          # 7. إنشاء ملف USB النهائي
+          zip -r AMIN-ULTRA-v1.0-FULL-REAL-BOOTABLE-multiboxpro.zip novaler
+          ls -lh *.zip
+          echo "SIZE:"
+          du -h AMIN-ULTRA-v1.0-FULL-REAL-BOOTABLE-multiboxpro.zip
 
-      - name: Clone OpenPLi Scarthgap
-        run: |
-          git clone --depth 1 --branch scarthgap https://github.com/OpenPLi/openpli-oe-core.git openpli-oe-core
-
-      - name: Initialize build environment
-        working-directory: openpli-oe-core
-        run: |
-          make init
-          make update
-
-      - name: Build MultiboxPro image
-        working-directory: openpli-oe-core
-        env:
-          MACHINE: multiboxpro
-        run: |
-          MACHINE=multiboxpro make image
-
-      - name: List generated images
-        if: always()
-        run: |
-          find openpli-oe-core/build/tmp/deploy/images -type f \( -name '*.zip' -o -name '*.tar.gz' -o -name '*.bin' -o -name '*.img' \) -print 2>/dev/null || true
-
-      - name: Upload image artifacts
-        if: success()
+      - name: Upload FULL REAL Image
         uses: actions/upload-artifact@v4
         with:
-          name: Novaler-MultiboxPro-OpenPLi
-          path: openpli-oe-core/build/tmp/deploy/images/multiboxpro/
-          if-no-files-found: error
-          compression-level: 0
+          name: AMIN-ULTRA-FULL-REAL-BOOTABLE-300MB
+          path: AMIN-ULTRA-v1.0-FULL-REAL-BOOTABLE-multiboxpro.zip
