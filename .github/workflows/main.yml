@@ -1,5 +1,4 @@
-
-name: Novaler OpenPLi Source Check
+name: Build OpenPLi MultiboxPro
 
 on:
   workflow_dispatch:
@@ -8,55 +7,50 @@ permissions:
   contents: read
 
 jobs:
-  inspect:
+  build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 360
     steps:
-      - name: Checkout project
+      - name: Checkout workflow repository
         uses: actions/checkout@v4
 
-      - name: Inspect official OpenPLi source
-        shell: bash
+      - name: Free runner space
         run: |
-          set -eu
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h
 
-          mkdir -p reports
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential chrpath cpio debianutils diffstat file gawk gcc git iputils-ping libacl1 liblz4-tool locales python3 python3-git python3-jinja2 python3-pexpect python3-pip python3-subunit socat texinfo unzip wget xz-utils zstd lz4
 
-          git clone --depth 1 --branch scarthgap \
-            https://github.com/OpenPLi/openpli-oe-core.git \
-            /tmp/openpli-oe-core
+      - name: Clone OpenPLi Scarthgap
+        run: |
+          git clone --depth 1 --branch scarthgap https://github.com/OpenPLi/openpli-oe-core.git openpli-oe-core
 
-          cd /tmp/openpli-oe-core
+      - name: Initialize build environment
+        working-directory: openpli-oe-core
+        run: |
+          make init
+          make update
 
-          {
-            echo "=== OpenPLi revision ==="
-            git log -1 --oneline
+      - name: Build MultiboxPro image
+        working-directory: openpli-oe-core
+        env:
+          MACHINE: multiboxpro
+        run: |
+          MACHINE=multiboxpro make image
 
-            echo
-            echo "=== Candidate machine configs ==="
-            find . -type f -path '*/conf/machine/*.conf' \
-              | sort > "$GITHUB_WORKSPACE/reports/machines.txt"
-
-            grep -Ei 'novaler|multibox|3798' \
-              "$GITHUB_WORKSPACE/reports/machines.txt" || true
-
-            echo
-            echo "=== Device-related source references ==="
-            git grep -inE 'novaler|multiboxpro|HI3798MV200' \
-              -- ':!*.po' \
-              > "$GITHUB_WORKSPACE/reports/device-references.txt" \
-              || true
-
-            cat "$GITHUB_WORKSPACE/reports/device-references.txt"
-
-            echo
-            echo "=== Check complete ==="
-          } | tee "$GITHUB_WORKSPACE/reports/summary.txt"
-
-      - name: Upload inspection reports
+      - name: List generated images
         if: always()
+        run: |
+          find openpli-oe-core/build/tmp/deploy/images -type f \( -name '*.zip' -o -name '*.tar.gz' -o -name '*.bin' -o -name '*.img' \) -print 2>/dev/null || true
+
+      - name: Upload image artifacts
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: novaler-openpli-source-report
-          path: reports/
-          if-no-files-found: warn
-
+          name: Novaler-MultiboxPro-OpenPLi
+          path: openpli-oe-core/build/tmp/deploy/images/multiboxpro/
+          if-no-files-found: error
+          compression-level: 0
