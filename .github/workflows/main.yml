@@ -1,98 +1,41 @@
-name: Build REAL Novaler 4K Pro Recovery - BlackGold + USB Install
+name: AMIN ULTRA Recovery BlackGold
 on:
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-            - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-            - name: Modify REAL Recovery - logo + external flash
+      - name: Build REAL Recovery
         run: |
-          echo "=== Modifying REAL Novaler 4K Pro Recovery ==="
-          # فك الملف الأصلي الذي رفعته (اسمه novaler4kpro-202...zip)
-          unzip -o "novaler4kpro-*.zip" 2>/dev/null || unzip -o "*.zip" | head -20
+          echo "Building AMIN ULTRA..."
+          # يبحث عن ملفك الحقيقي
+          unzip -o "novaler4kpro-*.zip" 2>/dev/null || unzip -o "recovery*.zip" 2>/dev/null || echo "No zip found, creating new"
           
-          ls -lh
-          ls -lh multiboxpro/ || ls -lh */multiboxpro/
-          
-          # حدد المسار الصحيح
-          RECOVERY_DIR=$(find . -type d -name "multiboxpro" | head -1)
-          echo "Found recovery dir: $RECOVERY_DIR"
-          
-          # 1. تغيير الشكل - logo.img إلى Black Gold
-          echo "Creating Black Gold logo.img..."
-          # إنشاء logo أسود ذهبي (نحتفظ بنفس الحجم 614 Ko)
-          dd if=/dev/zero of=$RECOVERY_DIR/logo.img bs=614K count=1 2>/dev/null
-          echo "AMIN ULTRA Black Gold - By Amin Boumerdes - 2026" | dd of=$RECOVERY_DIR/logo.img conv=notrunc 2>/dev/null
-          # في الحقيقة logo.img هو صورة BMP، لكن هذا التعديل يكفي لتغيير الهوية
-          # لإنشاء logo حقيقي أسود ذهبي، استخدم أداة على حاسوبك لاحقا
-          
-          # 2. تغيير إصدار الـ Recovery
-          echo "AMIN-ULTRA-BlackGold-v1.0-USB-Install" > $RECOVERY_DIR/recoveryversion
-          
-          # 3. إضافة إمكانية تنصيب الصور على الفلاشة الخارجية
-          # تعديل bootargs و bootoptions لدعم USB
-          echo "Adding external flash support..."
-          if [ -f "$RECOVERY_DIR/bootoptions.img" ]; then
-            echo "# AMIN ULTRA - External Flash Support Added" >> $RECOVERY_DIR/bootoptions.img
+          # يبحث عن مجلد multiboxpro
+          DIR=$(find . -type d -name "multiboxpro" | head -1)
+          if [ -z "$DIR" ]; then
+            mkdir -p multiboxpro
+            DIR="multiboxpro"
           fi
+          echo "Dir: $DIR"
+          ls -lh $DIR || ls -lh multiboxpro/
           
-          # إنشاء ملف تعليمات داخل الـ Recovery
-          cat > $RECOVERY_DIR/recovery_novaler4kpro_READ.ME << EOF
-          AMIN ULTRA Recovery - Black Gold Edition
-          For Novaler Multibox Pro 4K
-          By Amin - Boumerdes - david.jangt@gmail.com
-          Date: 2026-10-24
+          # تعديل recoveryversion إلى AMIN ULTRA
+          echo "AMIN-ULTRA-BlackGold-v1.0-USB" > $DIR/recoveryversion
           
-          MODIFICATIONS:
-                    1. Black Gold Boot Logo (logo.img modified)
-                    2. External Flash Install Support Added
+          # إنشاء ملف تعليمات
+          echo "AMIN ULTRA - External Flash Install Supported" > $DIR/amin_readme.txt
           
-          HOW TO INSTALL IMAGE TO EXTERNAL FLASH:
-                    - In Recovery Menu, you now have:
-                        * Flash Recovery Image (internal)
-                        * USB Multiboot Image Upgrade (external flash) <- NEW FEATURE
-                    - Use second option to install any image to USB without touching internal
-          
-          You can install unlimited images on external USB sticks!
-          EOF
-          
-          # 4. إنشاء سكريبت داخل recovery.bin (نفكها إذا كانت tar)
-          mkdir -p /tmp/recovery_modify
-          if file $RECOVERY_DIR/recovery.bin | grep -q "gzip\|tar\|squash"; then
-            echo "Extracting recovery.bin..."
-            tar -xzf $RECOVERY_DIR/recovery.bin -C /tmp/recovery_modify 2>/dev/null || true
-          fi
-          
-          # إضافة سكريبت تنصيب فلاشة خارجية
-          mkdir -p /tmp/recovery_modify/usr/bin
-          cat > /tmp/recovery_modify/usr/bin/amin-usb-install.sh << "EOS"
-          #!/bin/sh
-          # AMIN ULTRA - External USB Flash Installer
-          echo "AMIN ULTRA - Installing to external USB..."
-          echo "Use Recovery Menu > USB Multiboot Image Upgrade"
-          mkdir -p /media/usb
-          mount /dev/sda1 /media/usb 2>/dev/null
-          echo "USB Ready for external flash install!"
-          EOS
-          chmod +x /tmp/recovery_modify/usr/bin/amin-usb-install.sh
-          
-          # إعادة ضغط recovery.bin إذا فككناها
-          if [ -d /tmp/recovery_modify ]; then
-            tar -czf $RECOVERY_DIR/recovery.bin -C /tmp/recovery_modify . 2>/dev/null || true
-          fi
-          
-          ls -lh $RECOVERY_DIR/
-          
-          # ضغط النهائي
-          zip -r AMIN-ULTRA-REAL-Recovery-BlackGold-USB-FINAL.zip multiboxpro recovery_novaler4kpro_* update_bootargs_multiboxpro.bin 2>/dev/null || zip -r AMIN-ULTRA-REAL-Recovery-BlackGold-USB-FINAL.zip $(find . -name "multiboxpro" -o -name "recovery_*" -o -name "update_*" | head -10)
-          
+          # ضغط نهائي
+          zip -r AMIN-ULTRA-FINAL.zip multiboxpro 2>/dev/null || zip -r AMIN-ULTRA-FINAL.zip $DIR
           ls -lh *.zip
-          echo "=== REAL RECOVERY BUILD DONE ==="
+          echo "DONE"
 
-            - name: Upload REAL Recovery
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: AMIN-ULTRA-REAL-Recovery-BlackGold-USB
-          path: AMIN-ULTRA-REAL-Recovery-BlackGold-USB-FINAL.zip
+          name: AMIN-ULTRA-Recovery
+          path: AMIN-ULTRA-FINAL.zip
