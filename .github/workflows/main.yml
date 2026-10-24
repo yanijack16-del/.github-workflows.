@@ -1,1 +1,62 @@
 
+name: Novaler OpenPLi Source Check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Inspect official OpenPLi source
+        shell: bash
+        run: |
+          set -eu
+
+          mkdir -p reports
+
+          git clone --depth 1 --branch scarthgap \
+            https://github.com/OpenPLi/openpli-oe-core.git \
+            /tmp/openpli-oe-core
+
+          cd /tmp/openpli-oe-core
+
+          {
+            echo "=== OpenPLi revision ==="
+            git log -1 --oneline
+
+            echo
+            echo "=== Candidate machine configs ==="
+            find . -type f -path '*/conf/machine/*.conf' \
+              | sort > "$GITHUB_WORKSPACE/reports/machines.txt"
+
+            grep -Ei 'novaler|multibox|3798' \
+              "$GITHUB_WORKSPACE/reports/machines.txt" || true
+
+            echo
+            echo "=== Device-related source references ==="
+            git grep -inE 'novaler|multiboxpro|HI3798MV200' \
+              -- ':!*.po' \
+              > "$GITHUB_WORKSPACE/reports/device-references.txt" \
+              || true
+
+            cat "$GITHUB_WORKSPACE/reports/device-references.txt"
+
+            echo
+            echo "=== Check complete ==="
+          } | tee "$GITHUB_WORKSPACE/reports/summary.txt"
+
+      - name: Upload inspection reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: novaler-openpli-source-report
+          path: reports/
+          if-no-files-found: warn
+
