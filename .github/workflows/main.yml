@@ -1,213 +1,95 @@
-name: AMIN ULTRA - Build FULL Black Gold Image
+
+name: Novaler MultiboxPro - OpenPLi Scarthgap
+
 on:
   workflow_dispatch:
 
-jobs:
-  build-full-image:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+permissions:
+  contents: read
 
-      - name: Install Tools
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Install OpenPLi build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3 python3-pip binwalk squashfs-tools zip unzip wget
+          sudo apt-get install -y \
+            git git-lfs subversion cvs gettext \
+            build-essential gcc g++ make \
+            python3 python3-distutils \
+            wget curl unzip zip \
+            gawk diffstat texinfo \
+            chrpath socat cpio \
+            file lz4 libssl-dev \
+            libproc-processtable-perl \
+            rpcsvc-proto desktop-file-utils \
+            default-jre
 
-      - name: Download Base Image OpenATV for MultiboxPro
+      - name: Clone OpenPLi Scarthgap
         run: |
-          echo "=== Downloading base image for Novaler Multibox 4K Pro ==="
-          # نحمّل آخر صورة OpenATV لـ multiboxpro
-          wget -O openatv-base.zip "https://images.mynonpublic.com/openatv/current/multiboxpro/openatv-7.5-multiboxpro-20250601_mmc.zip" || echo "Trying alternative..."
-          # إذا فشل الرابط، نستخدم PurE2
-          if [ ! -f openatv-base.zip ] || [ $(stat -c%s openatv-base.zip) -lt 1000000 ]; then
-            wget -O openatv-base.zip "http://pur-e2.club/OU/images/7.4/multiboxpro/PurE2-7.4-multiboxpro-20250501_mmc.zip" || echo "Will build from scratch"
-          fi
-          ls -lh *.zip || echo "No base image yet, will create new"
+          git clone https://github.com/OpenPLi/openpli-oe-core.git
+          cd openpli-oe-core
+          git checkout scarthgap
 
-      - name: Build AMIN ULTRA Black Gold Full Image
+      - name: Initialize OpenPLi
         run: |
-          echo "=== Building AMIN ULTRA Black Gold FULL Image ==="
-          mkdir -p build
-          cd build
-          
-          # إذا وجدنا base image نفكها
-          if [ -f ../openatv-base.zip ]; then
-            unzip -o ../openatv-base.zip
-            echo "Extracted base image"
-          else
-            echo "Creating fresh multiboxpro structure"
-            mkdir -p multiboxpro
+          cd openpli-oe-core
+          make init
+          make update
+
+      - name: Verify Novaler machine support
+        run: |
+          cd openpli-oe-core
+
+          echo "Checking multiboxpro machine..."
+
+          MACHINE_CONF="meta-maxytec/conf/machine/multiboxpro.conf"
+
+          if [ ! -f "$MACHINE_CONF" ]; then
+            echo "ERROR: multiboxpro machine configuration missing"
+            exit 1
           fi
-          
-          # نضمن وجود مجلد multiboxpro
-          mkdir -p multiboxpro
-          
-          # === 1. إضافة Bootlogo أسود ذهبي ===
-          echo "Adding AMIN ULTRA Black Gold bootlogo..."
-          cat > multiboxpro/logo_generator.py << 'PY'
-          from PIL import Image, ImageDraw, ImageFont
-          W,H=1920,1080
-          img=Image.new('RGB',(W,H),(10,10,10))
-          draw=ImageDraw.Draw(img)
-          try:
-              f=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",120)
-              f2=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",40)
-          except:
-              f=f2=ImageFont.load_default()
-          gold=(255,215,0)
-          white=(255,255,255)
-          def ct(t,y,font,c):
-              bbox=draw.textbbox((0,0),t,font=font)
-              x=(W-(bbox[2]-bbox[0]))//2
-              draw.text((x+3,y+3),t,font=font,fill=(0,0,0))
-              draw.text((x,y),t,font=font,fill=c)
-          ct("AMIN ULTRA",250,f,gold)
-          ct("4K PRO",380,f,white)
-          ct("Black Gold Edition",520,f2,gold)
-          ct("By Amin - Boumerdes - Algeria",900,f2,gold)
-          img.save("bootlogo.png")
-          # تحويل إلى bootlogo.mvi للـ Enigma2
-          img.resize((1280,720)).save("bootlogo.jpg",quality=95)
-          PY
-          python3 multiboxpro/logo_generator.py || echo "Logo generated"
-          
-          # === 2. إضافة Skin أسود ذهبي ===
-          echo "Adding Black Gold skin..."
-          mkdir -p root/usr/share/enigma2/oDreamy-FHD-BlackGold-AMIN-ULTRA
-          cat > root/usr/share/enigma2/oDreamy-FHD-BlackGold-AMIN-ULTRA/skin.xml << 'XML'
-          <skin>
-            <output id="0"><resolution xres="1920" yres="1080" bpp="32"/></output>
-            <colors>
-              <color name="black" value="#0a0a0a"/>
-              <color name="gold" value="#FFD700"/>
-              <color name="white" value="#FFFFFF"/>
-              <color name="darkgold" value="#B48C00"/>
-              <color name="transparent" value="#00000000"/>
-            </colors>
-            <windowstyle type="skinned" id="0">
-              <color name="Background" color="black"/>
-              <color name="Label" color="gold"/>
-              <color name="ListboxBackground" color="black"/>
-              <color name="Listbox" color="white"/>
-            </windowstyle>
-            <screen name="InfoBar" position="0,0" size="1920,1080" backgroundColor="black">
-              
-              <eLabel text="AMIN ULTRA 4K PRO Black Gold Edition" position="100,950" size="800,40" font="Regular;28" foregroundColor="gold" backgroundColor="black"/>
-            </screen>
-          </skin>
-          XML
-          
-          # === 3. إضافة OpenMultiboot + دعم فلاش ديسك (ما لا يدعمه Novaler) ===
-          echo "Adding USB Flash Disk Support via OpenMultiboot..."
-          mkdir -p [STRIPPED 65 bytes] -p root/usr/lib/enigma2/python/Plugins/Extensions/AMINULTRA
-          
-          # بلجن AMIN ULTRA لدعم الفلاشة الخارجية
-          cat > root/usr/lib/enigma2/python/Plugins/Extensions/AMINULTRA/plugin.py << 'PY'
-          from Plugins.Plugin import PluginDescriptor
-          from Screens.Screen import Screen
-          from Components.Label import Label
-          from Components.ActionMap import ActionMap
-          import os
 
-          class AMIN_ULTRA_USB(Screen):
-              skin = """
-              <screen position="center,center" size="1000,700" backgroundColor="#0a0a0a" title="AMIN ULTRA - USB Flash Disk Support">
-                
-              </screen>
-              """
-              def __init__(self, session):
-                  Screen.__init__(self, session)
-                  text = """AMIN ULTRA Black Gold
+          echo "Machine configuration found:"
+          cat "$MACHINE_CONF"
 
-          USB Flash Disk Support ACTIVE
+          echo "Checking kernel recipes..."
+          find meta-maxytec -iname '*linux*' -type f
 
-          Original Novaler recovery does NOT support
-          external flash disk.
+          echo "Checking recovery and image recipes..."
+          find meta-maxytec -type f \
+            | grep -Ei 'recovery|image|multiboxpro' \
+            || true
 
-          This image ADDS it via OpenMultiboot!
+          echo "Checking chipset..."
+          grep -Ri "Hi3798Mv200" meta-maxytec \
+            || true
 
-          You can now:
-          - Install unlimited images on external USB
-          - Boot from USB flash disks
-          - Manage external images
+      - name: Build OpenPLi for multiboxpro
+        run: |
+          cd openpli-oe-core
+          MACHINE=multiboxpro make image
 
-          How to use:
-          1. Format USB as ext4
-          2. Insert to box
-          3. Menu > Plugins > OpenMultiboot
-          4. Install new image > Choose USB
+      - name: Check build output
+        if: always()
+        run: |
+          echo "=== Available image files ==="
+          find openpli-oe-core/build/tmp/deploy/images \
+            -type f \
+            \( -name '*.zip' -o -name 'uImage' -o -name '*.tar.bz2' \) \
+            -print 2>/dev/null || true
 
-          By Amin - Boumerdes - Algeria - 2026
-          """
-                  self["info"] = Label(text)
-                  self["actions"] = ActionMap(["OkCancelActions"], {"ok": self.close, "cancel": self.close}, -1)
-
-          def main(session, **kwargs):
-              os.system("mkdir -p /media/usb_flash; mkdir -p /media/usb_flash/open-multiboot; mount /dev/sda1 /media/usb_flash 2>/dev/null; modprobe usb-storage 2>/dev/null")
-              session.open(AMIN_ULTRA_USB)
-
-          def Plugins(**kwargs):
-              return [PluginDescriptor(name="AMIN ULTRA USB Flash", description="Adds USB flash disk support that Novaler lacks - Install images to external USB", where=PluginDescriptor.WHERE_PLUGINMENU, fnc=main)]
-          PY
-          
-          # سكريبت تثبيت فلاشة خارجية
-          cat > root/usr/bin/amin-usb-flash-installer.sh << 'SH'
-          #!/bin/sh
-          # AMIN ULTRA - USB Flash Disk Support
-          echo "AMIN ULTRA - USB Flash Disk Support"
-          echo "Adding support that Novaler recovery lacks"
-          modprobe usb-storage 2>/dev/null
-          modprobe sd_mod 2>/dev/null
-          mkdir -p /media/usb_flash
-          for dev in /dev/sda1 /dev/sdb1; do
-            if [ -b $dev ]; then
-              mount $dev /media/usb_flash 2>/dev/null
-              mkdir -p /media/usb_flash/open-multiboot
-              echo "Mounted $dev - Ready for external images!"
-              ls -lh /media/usb_flash/
-            fi
-          done
-          echo "You can now install images to external USB via OpenMultiboot"
-          SH
-          chmod +x root/usr/bin/amin-usb-flash-installer.sh
-          
-          # === 4. إضافة Branding ===
-          echo "Adding AMIN ULTRA branding..."
-          mkdir -p root/etc
-          echo "AMIN ULTRA Black Gold Edition" > root/etc/amin-version
-          echo "By Amin Boumerdes Algeria 2026" >> root/etc/amin-version
-          echo "USB Flash Disk Support Enabled - Original Novaler lacks this" >> root/etc/amin-version
-          
-          cat > root/etc/issue << 'ISS'
-          AMIN ULTRA 4K PRO - Black Gold Edition
-          USB Flash Disk Support Enabled
-          By Amin - Boumerdes - Algeria
-          ISS
-          
-          # === 5. بناء الصورة النهائية ===
-          echo "Building final image..."
-          # ننسخ الملفات الأصلية إذا وجدت
-          if [ -d ../multiboxpro ]; then
-            cp -r ../multiboxpro/* multiboxpro/ 2>/dev/null || true
-          fi
-          
-          # نضيف recoveryversion جديدة
-          echo "AMIN-ULTRA-BlackGold-FULL-IMAGE-v1.0-USB-FLASH-SUPPORT" > multiboxpro/recoveryversion
-          
-          # بناء zip نهائي
-          zip -r ../AMIN-ULTRA-BlackGold-FULL-IMAGE-multiboxpro.zip multiboxpro root -x "*.git*" || zip -r ../AMIN-ULTRA-BlackGold-FULL-IMAGE-multiboxpro.zip multiboxpro
-          
-          cd ..
-          ls -lh *.zip
-          echo "=== FULL IMAGE BUILD DONE ==="
-          echo "This is a COMPLETE Enigma2 image with:"
-          echo "- Black Gold skin"
-          echo "- USB Flash Disk Support (via OpenMultiboot)"
-          echo "- AMIN ULTRA branding"
-          echo "- No blue screen - valid files only"
-
-      - name: Upload Full Image
+      - name: Upload build artifacts
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: AMIN-ULTRA-FULL-BlackGold-Image
-          path: AMIN-ULTRA-BlackGold-FULL-IMAGE-multiboxpro.zip
+          name: Novaler-MultiboxPro-OpenPLi-Scarthgap
+          path: openpli-oe-core/build/tmp/deploy/images/multiboxpro/
+          if-no-files-found: error
+          retention-days: 7
